@@ -1,262 +1,63 @@
-# Linux-Fake-Background-Webcam
+# Zoom virtual background on Ubuntu 20.04-LTS (focal)
+Making zoom virtual background on Linux working is very difficult indeed, because zoom requires a **Physical green screen** which is not something we always have. 
+The following are some quick commands to build a virtual webcam so you can instantly hook into Zoom. 
 
-## Background
-Video conferencing software support for background blurring and background
-replacement under Linux is relatively poor. The Linux version of Zoom only
-supports background replacement via chroma key. The Linux version of Microsoft
-Team does not support background blur. Over at Webcamoid, we tried to figure out
-if we can do these reliably using open source software
-([issues/250](https://github.com/webcamoid/webcamoid/issues/250)).
+## Install docker and run everything inside docker
+Run the following command to install docker if you don't have one on your local machine yet: 
 
-Benjamen Elder wrote a
-[blog post](https://elder.dev/posts/open-source-virtual-background/), describing
-a background replacement solution using Python, OpenCV, Tensorflow and Node.js.
-The scripts in Elder's blogpost do not work out of box. In this repository, I
-tidied up his scripts, and provide a turn-key solution for creating a virtual
-webcam with background replacement and additionally foreground object placement,
-e.g. a podium.
-
-Unlike the original blog post this can work with CPU-only. It checks for the presence
-of `/dev/nvidia0` to determine if there is a GPU present. By
-downscaling the image sent to bodypix neural network, and upscaling the
-received mask, this whole setup runs sufficiently fast under Intel i7-4900MQ.
-
-## Prerequisite
-You need to install either v4l2loopback or akvcam. This repository was
-originally written with v4l2loopback in mind. However, there has been report
-that v4l2loopback does not work with certain versions of Ubuntu. Additionally,
-the author has never really managed to get v4l2loopback to work with Google
-Chrome. Therefore support for akvcam has been added.
-
-### v4l2loopback
-If you are on Debian Buster, you can do the
-following:
-
-    sudo apt install v4l2loopback-dkms
-
-I added module options for v4l2loopback by creating
-``/etc/modprobe.d/v4l2loopback.conf`` with the following content:
-
-    options v4l2loopback devices=1  exclusive_caps=1 video_nr=2 card_label="v4l2loopback"
-
-``exclusive_caps`` is required by some programs, e.g. Zoom and Chrome.
-``video_nr`` specifies which ``/dev/video*`` file is the v4l2loopback device.
-In this repository, I assume that ``/dev/video2`` is the virtual webcam, and
-``/dev/video0`` is the physical webcam.
-
-I also created ``/etc/modules-load.d/v4l2loopback.conf`` with the following content:
-
-    v4l2loopback
-
-This automatically loads v4l2loopback module at boot, with the specified module
-options.
-
-If you get an error like
-```
-OSError: [Errno 22] Invalid argument
+```bash 
+sudo apt-get remove docker docker-engine docker.io containerd runc
+sudo apt-get update
+sudo apt-get install \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    gnupg-agent \
+    software-properties-common
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+sudo add-apt-repository \
+   "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+   $(lsb_release -cs) \
+   stable"
+sudo apt-get update
+sudo apt-get install docker-ce docker-ce-cli containerd.io
+sudo usermod -aG docker $USER
+docker run hello-world
+sudo systemctl enable docker
+sudo curl -L "https://github.com/docker/compose/releases/download/1.27.4/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
 ```
 
-when opening the webcam from Python, please try the latest version of
-v4l2loopback from the its
-[Github repository](https://github.com/umlaeute/v4l2loopback),
-as the version from your package manager may be too old.
+## Clone this repo, change setting, and run
 
-#### Ubuntu 18.04
-If you are using Ubuntu 18.04, please be aware of the following additional
-instruction:
-1. remove apt package
-    - `sudo modprobe -r v4l2loopback`
-    - `sudo apt remove v4l2loopback-dkms`
-2. install aux
-    - `sudo apt-get install linux-generic`
-    - `sudo apt install dkms`
-3. install v4l2loopback from the repository
-    - `git clone https://github.com/umlaeute/v4l2loopback.git`
-    - `cd v4l2loopback`
-    - `make`  # The other commands are not needed
-4. instal mod
-    - `sudo cp -R . /usr/src/v4l2loopback-1.1`
-    - `sudo dkms add -m v4l2loopback -v 1.1`
-    - `sudo dkms build -m v4l2loopback -v 1.1`
-    - `sudo dkms install -m v4l2loopback -v 1.1`
-5. reboot
-    - `sudo reboot`
+```bash 
+# Install some required packages
+sudo apt install v4l2loopback-dkms;
+sudo modprobe -r v4l2loopback;
+sudo modprobe v4l2loopback devices=1 video_nr=20 card_label="v4l2loopback" exclusive_caps=1;
 
-This may apply for other versions of Ubuntu as well. For more information,
-please refer to the following Github
-[issue](https://github.com/jremmons/pyfakewebcam/issues/7#issuecomment-616617011).
+# Clone
+git clone https://github.com/leftsidemonitor/ubuntu-zoom-virtual-background.git ~/ubuntu-zoom-virtual-background
+cd ~/ubuntu-zoom-virtual-background
+cp docker_defaults.env .env
 
-### Akvcam
-To install akvcam, you need to do the following:
-1. Install the driver by following the instruction at
-[Akvcam wiki](https://github.com/webcamoid/akvcam/wiki/Build-and-install). I
-recommend installing and managing the driver via DKMS.
-2. Configure the driver by copying ``fakecam/akvcam`` to ``/etc/``, for more
-information, please refer to
-[Akvcam wiki](https://github.com/webcamoid/akvcam/wiki/Configure-the-cameras)
-
-The configuration file I supplied was originally generated by Webcamoid, I
-added the ``rw`` attributes to do the virtual camera devices. If you already
-have already configured akvcam via webcamoid, you need to modify the
-``/etc/akvcam/config.ini`` to add the ``rw`` attributes.
-
-### Python 3
-You will need Python 3. You need to have pip installed. Please make sure that
-you have installed the correct version pip, if you have both Python 2 and
-Python 3 installed. Please make sure that the command ``pip3`` runs.
-
-In Debian, you can run
-
-    sudo apt-get install python3-pip
-
-I am assuming that you have set up your user environment properly, and when you
-install Python packages, they will be installed locally within your home
-directory.
-
-You might want to add the following line in your ``.profile``. This line is
-needed for Debian Buster.
-
-    export PATH="$HOME/.local/bin":$PATH
-configuration files yourself.
-
-### Node.js
-You need to have Node.js. Node.js version 12 is known to work. To install
-Node.js, please follow the instructions at
-[NodeSource](https://github.com/nodesource/distributions/blob/master/README.md).
-
-## Installation
-Simply run
-
-    ./install.sh
-
-### Installing with Docker
-Please refer to [DOCKER.md](DOCKER.md). The updated Docker related files were
-added by [liske](https://github.com/liske).
-
-Using Docker is unnecessary. However it makes starting up and shutting down the virtual webcam very easy and convenient.
-The only downside is that the  ability to change background and foreground images is slightly more complicated and
-has some limitations.
-
-## Usage
-Assuming you are not using the Docker version, overriding the ports settings, please also make sure that your
-TCP port ``127.0.0.1:9000`` is free, as we will be using it.
-
-You can change the port by setting the environment variable PORT. If you set a path, it will use a UNIX Socket instead.
-
-You need to open two terminal windows. In one terminal window, do the following:
-
-    cd bodypix
-    node app.js
-
-In the other terminal window, do the following:
-
-    cd fakecam
-    python3 fake.py
-
-The files that you might want to replace are the followings:
-
-  - ``fakecam/background.jpg`` - the background image
-  - ``fakecam/foreground.jpg`` - the foreground image
-  - ``fakecam/foreground-mask.jpg`` - the foreground image mask
-
-If you want to change the files above in the middle of streaming, replace them
-and press ``CTRL-C``
-
-### fakecam/fake.py
-Note that animated background is supported. You can use any video file that can
-be read by OpenCV.
-
-If you are not running fake.py under Docker, it supports the following options:
-
-    usage: fake.py [-h] [-W WIDTH] [-H HEIGHT] [-F FPS] [-S SCALE_FACTOR]
-                [-B BODYPIX_URL] [-w WEBCAM_PATH] [-v V4L2LOOPBACK_PATH]
-                [--akvcam] [-i IMAGE_FOLDER] [-b BACKGROUND_IMAGE]
-                [--tile-background] [--no-foreground] [-f FOREGROUND_IMAGE]
-                [-m FOREGROUND_MASK_IMAGE] [--hologram]
-
-    Faking your webcam background under GNU/Linux. Please make sure your bodypix
-    network is running. For more information, please refer to:
-    https://github.com/fangfufu/Linux-Fake-Background-Webcam
-
-    optional arguments:
-    -h, --help            show this help message and exit
-    -W WIDTH, --width WIDTH
-                            Set real webcam width
-    -H HEIGHT, --height HEIGHT
-                            Set real webcam height
-    -F FPS, --fps FPS     Set real webcam FPS
-    -S SCALE_FACTOR, --scale-factor SCALE_FACTOR
-                            Scale factor of the image sent to BodyPix network
-    -B BODYPIX_URL, --bodypix-url BODYPIX_URL
-                            Tensorflow BodyPix URL (or path to UNIX socket)
-    -w WEBCAM_PATH, --webcam-path WEBCAM_PATH
-                            Set real webcam path
-    -v V4L2LOOPBACK_PATH, --v4l2loopback-path V4L2LOOPBACK_PATH
-                            V4l2loopback device path
-    --akvcam              Use an akvcam device rather than a v4l2loopback device
-    -i IMAGE_FOLDER, --image-folder IMAGE_FOLDER
-                            Folder which contains foreground and background images
-    -b BACKGROUND_IMAGE, --background-image BACKGROUND_IMAGE
-                            Background image path, animated background is
-                            supported.
-    --tile-background     Tile the background image
-    --no-foreground       Disable foreground image
-    -f FOREGROUND_IMAGE, --foreground-image FOREGROUND_IMAGE
-                            Foreground image path
-    -m FOREGROUND_MASK_IMAGE, --foreground-mask-image FOREGROUND_MASK_IMAGE
-                            Foreground mask image path
-    --hologram            Add a hologram effect
-
-### bodypix/app.js
-If under/over-segmentation occurs, you can tweak ``segmentationThreshold``. To
-make the network run faster, you can change ``internalResolution``, however this
-will reduce segmentation accuracy. Both and other variables can be changed by
-exposing them via environment variables before running bodypix. See the bodypix
-[manual](https://github.com/tensorflow/tfjs-models/blob/master/body-pix/README.md)
-for detailed information about these.
-
-```
-BPHFLIP     - Horizontal flip [ true, false ]
-BPIRES      - Internal Resolution [ 0.0, 1.0 ]
-BPMULTI     - Multiplier [ 0.0, 1.0 ]
-BPOUTSTRIDE - Output Stride [ 8, 16, 32 ]
-BPQBYTES    - Quantization bytes [ 1, 2, 4 ]
-BPSEGTHRES  - Segmentation Threshold [ 0.0, 1.0 ]
+docker-compose up &;
 ```
 
-#### Compilation of Tensorflow C library
-Tensorflow.js uses Tensorflow C library. The default version shipped with
-Tensorflow.js is most likely not optimised for your CPU. For me, it gives me
-warnings that it was not compiled ``AVX2`` and ``FMA`` instructions. Compiling
-a version of Tensorflow C library that is optimised for your CPU will improve
-the performance. For me, it improved the framerate.
+That's it! now in Zoom you should be able to find `v4l2loopback` as the camera name and start using it. 
 
-In order to compile your own Tensorflow C library, please follow the instruction
-at [TENSORFLOW.md](TENSORFLOW.md)
+## Stop the fake camera
+``` 
+cd ~/ubuntu-zoom-virtual-background; 
+docker-compose down &;
+```
 
-## License
+## Make some alias in your ~/.bashrc so you can start and stop this even faster
+The above command can be long to type, let's make some alias so we can run this a bit faster next time by adding the following line to your `.bashrc` file 
 
-    Linux Fake Background Webcam
-    Copyright (C) 2020  Fufu Fang
+```bash 
+code ~/.bashrc 
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-Please note that Benjamen Elder's
-[blog post](https://elder.dev/posts/open-source-virtual-background/)
-is licensed under CC BY 4.0 (see the bottom of that webpage). According to
-[FSF](https://www.fsf.org/blogs/licensing/cc-by-4-0-and-cc-by-sa-4-0-added-to-our-list-of-free-licenses),
-CC BY 4.0 is a noncopyleft license that is compatible with the GNU General
-Public License version 3.0 (GPLv3), meaning I can adapt a CC BY 4.0
-licensed work, forming a larger work, then release it under the terms
-of GPLv3.
+alias fakecam='sudo modprobe -r v4l2loopback;sudo modprobe v4l2loopback devices=1 video_nr=20 card_label="v4l2loopback" exclusive_caps=1;cd ~/ubuntu-zoom-virtual-background;; docker-compose up &;'
+alias stopcam='cd ~/ubuntu-zoom-virtual-background;; docker-compose down &;'
+```
