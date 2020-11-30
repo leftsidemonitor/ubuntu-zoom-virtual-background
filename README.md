@@ -2,6 +2,8 @@
 Making zoom virtual background on Linux working is very difficult indeed, because zoom requires a **Physical green screen** which is not something we always have. 
 The following are some quick commands to build a virtual webcam so you can instantly hook into Zoom. 
 
+For more information please go here: https://leftsidemonitor.com/ubuntu-zoom-virtual-background-without-physical-green-screen/[https://leftsidemonitor.com/ubuntu-zoom-virtual-background-without-physical-green-screen/] 
+
 ## Install docker and run everything inside docker
 Run the following command to install docker if you don't have one on your local machine yet: 
 
@@ -56,8 +58,8 @@ docker-compose down &;
 The above command can be long to type, let's make some alias so we can run this a bit faster next time by adding the following line to your `.bashrc` file 
 
 ```bash 
-code ~/.bashrc 
+# add to ~/.bashrc or ~/.zshrc
 
-alias fakecam='sudo modprobe -r v4l2loopback;sudo modprobe v4l2loopback devices=1 video_nr=20 card_label="v4l2loopback" exclusive_caps=1;cd ~/ubuntu-zoom-virtual-background;; docker-compose up &;'
-alias stopcam='cd ~/ubuntu-zoom-virtual-background;; docker-compose down &;'
+alias fakecam='sudo modprobe -r v4l2loopback;sudo modprobe v4l2loopback devices=1 video_nr=20 card_label="v4l2loopback" exclusive_caps=1;cd ~/ubuntu-zoom-virtual-background; docker-compose up &;'
+alias stopcam='cd ~/ubuntu-zoom-virtual-background; docker-compose down &;'
 ```
